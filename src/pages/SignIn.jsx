@@ -15,9 +15,9 @@ export default function SignIn() {
     if (user && canUseApp) navigate(location.state?.from || '/', { replace: true })
   }, [user, canUseApp, navigate, location.state])
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault()
-    const result = signInDevice()
+    const result = await signInDevice()
     if (!result.ok) {
       setError(result.error)
       if (result.redirect) {

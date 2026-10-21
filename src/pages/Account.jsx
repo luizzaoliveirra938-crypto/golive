@@ -33,11 +33,11 @@ export default function Account() {
     setSheet(kind)
   }
 
-  function saveSheet() {
+  async function saveSheet() {
     const next = draft.trim()
     if (next.length < 2) return
     if (sheet === 'name') {
-      const result = changeDeviceName(next)
+      const result = await changeDeviceName(next)
       if (!result.ok) {
         setNameError(result.error)
         return

@@ -1385,6 +1385,22 @@ img { display: block; max-width: 100%; }
   letter-spacing: -0.6px;
   color: #0f0f0f;
 }
+.admin-kv-warn {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fef3c7;
+  border: 1px solid #f0c36a;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.admin-kv-ok {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #15803d;
+  font-weight: 600;
+}
 .admin-device-list {
   display: flex;
   flex-direction: column;

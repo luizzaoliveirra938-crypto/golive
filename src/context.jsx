@@ -8,6 +8,15 @@ import {
   MEMBER_EMAIL,
   statusLabel,
 } from './auth'
+import {
+  apiDeleteDevice,
+  apiGetAllDevices,
+  apiGetDevice,
+  apiPatchDevice,
+  apiSetSession,
+  apiUpsertDevice,
+} from './deviceApi'
+import { mergeDevice } from './deviceSync'
 
 const AppContext = createContext(null)
 const STORAGE_KEY = 'golive-state-v3'
@@ -177,6 +186,41 @@ export function AppProvider({ children }) {
     return () => clearTimeout(timer)
   }, [toast])
 
+  // Shared Cloudflare store — phone signups appear on admin, status syncs live.
+  useEffect(() => {
+    let cancelled = false
+
+    async function pullMine() {
+      const result = await apiGetDevice(deviceId)
+      if (cancelled || !result.ok) return
+      if (result.device) {
+        setDevices((prev) => mergeDevice(prev, result.device))
+      }
+      if ('activeSessionDeviceId' in result) {
+        setActiveSessionDeviceId(result.activeSessionDeviceId)
+      }
+    }
+
+    async function pullAll() {
+      const result = await apiGetAllDevices()
+      if (cancelled || !result.ok) return
+      setDevices(result.devices)
+      setActiveSessionDeviceId(result.activeSessionDeviceId)
+    }
+
+    async function sync() {
+      if (adminUnlocked) await pullAll()
+      else await pullMine()
+    }
+
+    sync()
+    const timer = setInterval(sync, adminUnlocked ? 3000 : 5000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [adminUnlocked, deviceId])
+
   // One active device session at a time — kick this tab if another device took the session.
   useEffect(() => {
     if (!user) return
@@ -229,21 +273,29 @@ export function AppProvider({ children }) {
     return () => window.removeEventListener('storage', onStorage)
   }, [deviceId, user])
 
-  function patchDevice(id, patch) {
-    setDevices((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              ...patch,
-              updatedAt: new Date().toISOString(),
-            }
-          : item
-      )
-    )
+  function patchDeviceLocal(id, patch) {
+    const updated = {
+      ...(devices.find((item) => item.id === id) || { id }),
+      ...patch,
+      id,
+      updatedAt: new Date().toISOString(),
+    }
+    setDevices((prev) => mergeDevice(prev, updated))
+    return updated
   }
 
-  function applyNameChange(existing, name) {
+  async function persistDevice(device) {
+    const result = await apiUpsertDevice(device)
+    if (result.ok && result.device) {
+      setDevices((prev) => mergeDevice(prev, result.device))
+      if ('activeSessionDeviceId' in result) {
+        setActiveSessionDeviceId(result.activeSessionDeviceId)
+      }
+    }
+    return result
+  }
+
+  async function applyNameChange(existing, name) {
     const previous = String(existing.name || '').trim()
     if (previous === name) {
       return { ok: true, status: existing.status, unchanged: true }
@@ -255,64 +307,61 @@ export function AppProvider({ children }) {
     const meta = detectDeviceMeta()
     const signedInHere = Boolean(user && activeSessionDeviceId === deviceId)
 
-    // Signed in: rename freely — no re-approval.
+    let nextDevice
     if (signedInHere) {
-      setDevices((prev) =>
-        prev.map((item) =>
-          item.id === deviceId
-            ? {
-                ...item,
-                name,
-                previousName: previous || item.previousName || '',
-                nameChanges: used + 1,
-                status: 'allowed',
-                keepAccess: true,
-                email: MEMBER_EMAIL,
-                userAgent: meta.userAgent || item.userAgent || '',
-                label: meta.label || item.label || 'Unknown',
-                adminNote: '',
-                updatedAt: new Date().toISOString(),
-              }
-            : item
-        )
-      )
+      nextDevice = {
+        ...existing,
+        name,
+        previousName: previous || existing.previousName || '',
+        nameChanges: used + 1,
+        status: 'allowed',
+        keepAccess: true,
+        email: MEMBER_EMAIL,
+        userAgent: meta.userAgent || existing.userAgent || '',
+        label: meta.label || existing.label || 'Unknown',
+        adminNote: '',
+        updatedAt: new Date().toISOString(),
+      }
+      setDevices((prev) => mergeDevice(prev, nextDevice))
       setDisplayName(name)
       setUser((prev) => (prev ? { ...prev, name } : prev))
-      setToast('Name updated')
+      const saved = await persistDevice(nextDevice)
+      if (!saved.ok) {
+        setToast(saved.error || 'Saved locally — cloud sync failed')
+      } else {
+        setToast('Name updated')
+      }
       return { ok: true, status: 'allowed' }
     }
 
-    // Logged out: if this device was already allowed (or edited), name change needs approval before sign-in.
     const needsReapproval =
       existing.status === 'allowed' ||
       existing.status === 'edited' ||
       Boolean(existing.lastLoginAt)
     const nextStatus = needsReapproval ? 'edited' : existing.status === 'pending' ? 'pending' : 'edited'
 
-    setDevices((prev) =>
-      prev.map((item) =>
-        item.id === deviceId
-          ? {
-              ...item,
-              name,
-              previousName: previous || item.previousName || '',
-              nameChanges: used + 1,
-              status: nextStatus,
-              keepAccess: false,
-              email: MEMBER_EMAIL,
-              userAgent: meta.userAgent || item.userAgent || '',
-              label: meta.label || item.label || 'Unknown',
-              adminNote: nextStatus === 'edited' ? 'Name edited while logged out — needs re-approval' : item.adminNote || '',
-              updatedAt: new Date().toISOString(),
-            }
-          : item
-      )
-    )
+    nextDevice = {
+      ...existing,
+      name,
+      previousName: previous || existing.previousName || '',
+      nameChanges: used + 1,
+      status: nextStatus,
+      keepAccess: false,
+      email: MEMBER_EMAIL,
+      userAgent: meta.userAgent || existing.userAgent || '',
+      label: meta.label || existing.label || 'Unknown',
+      adminNote: nextStatus === 'edited' ? 'Name edited while logged out — needs re-approval' : existing.adminNote || '',
+      updatedAt: new Date().toISOString(),
+    }
+    setDevices((prev) => mergeDevice(prev, nextDevice))
     setDisplayName(name)
+    const saved = await persistDevice(nextDevice)
     setToast(
-      nextStatus === 'edited'
-        ? 'Name edited — admin approval required before sign in'
-        : 'Name updated — waiting for admin approval'
+      !saved.ok
+        ? saved.error || 'Cloud sync failed — ask admin to check KV binding'
+        : nextStatus === 'edited'
+          ? 'Name edited — admin approval required before sign in'
+          : 'Name updated — waiting for admin approval'
     )
     return { ok: true, status: nextStatus }
   }
@@ -351,7 +400,7 @@ export function AppProvider({ children }) {
     adminUnlocked,
     notify: (message) => setToast(message),
     getEventById: (id) => allEvents.find((event) => event.id === id),
-    signUpDevice: (fullName) => {
+    signUpDevice: async (fullName) => {
       const name = String(fullName || '').trim()
       if (name.length < 2) return { ok: false, error: 'Enter your full name.' }
       const now = new Date().toISOString()
@@ -363,32 +412,35 @@ export function AppProvider({ children }) {
       if (existing) {
         return applyNameChange(existing, name)
       }
-      setDevices((prev) => [
-        {
-          id: deviceId,
-          name,
-          email: MEMBER_EMAIL,
-          status: 'pending',
-          createdAt: now,
-          updatedAt: now,
-          lastLoginAt: null,
-          adminNote: '',
-          subscribeProof: null,
-          subscribeNote: '',
-          subscribeFileName: '',
-          nameChanges: 0,
-          previousName: '',
-          keepAccess: false,
-          userAgent: meta.userAgent,
-          label: meta.label,
-        },
-        ...prev,
-      ])
+      const device = {
+        id: deviceId,
+        name,
+        email: MEMBER_EMAIL,
+        status: 'pending',
+        createdAt: now,
+        updatedAt: now,
+        lastLoginAt: null,
+        adminNote: '',
+        subscribeProof: null,
+        subscribeNote: '',
+        subscribeFileName: '',
+        nameChanges: 0,
+        previousName: '',
+        keepAccess: false,
+        userAgent: meta.userAgent,
+        label: meta.label,
+      }
+      setDevices((prev) => mergeDevice(prev, device))
       setDisplayName(name)
+      const saved = await persistDevice(device)
+      if (!saved.ok) {
+        setToast(saved.error || 'Signup saved on this phone — cloud sync failed (check KV binding)')
+        return { ok: false, error: saved.error || 'Could not reach shared device store. Admin will not see this yet.' }
+      }
       setToast('Submitted for admin approval')
       return { ok: true, status: 'pending' }
     },
-    changeDeviceName: (fullName) => {
+    changeDeviceName: async (fullName) => {
       const name = String(fullName || '').trim()
       if (name.length < 2) return { ok: false, error: 'Enter a name with at least 2 characters.' }
       const existing = devices.find((item) => item.id === deviceId)
@@ -398,8 +450,15 @@ export function AppProvider({ children }) {
       }
       return applyNameChange(existing, name)
     },
-    signInDevice: () => {
-      const record = devices.find((item) => item.id === deviceId)
+    signInDevice: async () => {
+      const remote = await apiGetDevice(deviceId)
+      const record = remote.device || devices.find((item) => item.id === deviceId)
+      if (remote.ok && remote.device) {
+        setDevices((prev) => mergeDevice(prev, remote.device))
+      }
+      if (remote.ok && 'activeSessionDeviceId' in remote) {
+        setActiveSessionDeviceId(remote.activeSessionDeviceId)
+      }
       if (!record) {
         return { ok: false, error: 'No signup on this device. Create an account first.' }
       }
@@ -434,23 +493,30 @@ export function AppProvider({ children }) {
         return { ok: false, error: 'This device cannot sign in yet.', status: record.status }
       }
 
-      // Same allowed device can sign back in without another admin approval.
       const meta = detectDeviceMeta()
-      setUser({ name: record.name, email: MEMBER_EMAIL, deviceId })
-      setDisplayName(record.name)
-      setActiveSessionDeviceId(deviceId)
-      patchDevice(deviceId, {
+      const next = {
+        ...record,
         lastLoginAt: new Date().toISOString(),
         keepAccess: true,
         email: MEMBER_EMAIL,
         userAgent: meta.userAgent || record.userAgent,
         label: meta.label || record.label,
-      })
+        updatedAt: new Date().toISOString(),
+      }
+      setUser({ name: record.name, email: MEMBER_EMAIL, deviceId })
+      setDisplayName(record.name)
+      setActiveSessionDeviceId(deviceId)
+      setDevices((prev) => mergeDevice(prev, next))
+      await persistDevice(next)
+      await apiSetSession(deviceId)
       setToast('Signed in')
       return { ok: true, status: 'allowed' }
     },
-    signOut: () => {
-      if (activeSessionDeviceId === deviceId) setActiveSessionDeviceId(null)
+    signOut: async () => {
+      if (activeSessionDeviceId === deviceId) {
+        setActiveSessionDeviceId(null)
+        await apiSetSession(null)
+      }
       setUser(null)
     },
     unlockAdmin: () => {
@@ -461,7 +527,7 @@ export function AppProvider({ children }) {
     lockAdmin: () => {
       // Admin stays signed in permanently — lock is disabled.
     },
-    setDeviceStatus: (id, status, note = '') => {
+    setDeviceStatus: async (id, status, note = '') => {
       const patch = {
         status,
         adminNote: note,
@@ -472,30 +538,48 @@ export function AppProvider({ children }) {
       }
       if (FORCE_LOGOUT_STATUSES.includes(status)) {
         patch.keepAccess = false
+        patch.clearSession = true
       }
-      patchDevice(id, patch)
+      if (status === 'subscribe') patch.clearSession = true
+      patchDeviceLocal(id, patch)
+      const result = await apiPatchDevice(id, patch)
+      if (result.ok) {
+        if (Array.isArray(result.devices)) setDevices(result.devices)
+        else if (result.device) setDevices((prev) => mergeDevice(prev, result.device))
+        if ('activeSessionDeviceId' in result) setActiveSessionDeviceId(result.activeSessionDeviceId)
+      }
       if (FORCE_LOGOUT_STATUSES.includes(status) || status === 'subscribe') {
         if (activeSessionDeviceId === id) setActiveSessionDeviceId(null)
         if (deviceId === id) setUser(null)
       }
-      setToast(`Device marked ${statusLabel(status)}`)
+      setToast(result.ok ? `Device marked ${statusLabel(status)}` : result.error || 'Update failed')
     },
-    deleteDevice: (id) => {
-      setDevices((prev) => prev.filter((item) => item.id !== id))
+    deleteDevice: async (id) => {
+      const result = await apiDeleteDevice(id)
+      if (result.ok) {
+        setDevices(result.devices)
+        setActiveSessionDeviceId(result.activeSessionDeviceId)
+      } else {
+        setDevices((prev) => prev.filter((item) => item.id !== id))
+      }
       if (activeSessionDeviceId === id) setActiveSessionDeviceId(null)
       if (deviceId === id) setUser(null)
-      setToast('Device deleted')
+      setToast(result.ok ? 'Device deleted' : result.error || 'Delete failed')
     },
-    submitSubscribeProof: (proof) => {
+    submitSubscribeProof: async (proof) => {
       if (!thisDevice) return { ok: false, error: 'Sign up on this device first.' }
-      patchDevice(deviceId, {
+      const next = {
+        ...thisDevice,
         status: 'subscribe_pending',
         subscribeProof: proof.image,
         subscribeNote: proof.note || '',
         subscribeFileName: proof.fileName || '',
-      })
-      setToast('Subscription proof submitted')
-      return { ok: true }
+        updatedAt: new Date().toISOString(),
+      }
+      setDevices((prev) => mergeDevice(prev, next))
+      const saved = await persistDevice(next)
+      setToast(saved.ok ? 'Subscription proof submitted' : saved.error || 'Cloud sync failed')
+      return saved.ok ? { ok: true } : { ok: false, error: saved.error }
     },
     setLocation: (next) => setLocation(String(next || '').trim() || 'Kuala Lumpur'),
     setDisplayName: (next) => {

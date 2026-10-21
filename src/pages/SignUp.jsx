@@ -10,9 +10,9 @@ export default function SignUp() {
   const [name, setName] = useState(thisDevice?.name || '')
   const [error, setError] = useState('')
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault()
-    const result = signUpDevice(name)
+    const result = await signUpDevice(name)
     if (!result.ok) {
       setError(result.error)
       return

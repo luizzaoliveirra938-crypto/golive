@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context'
 import { MAX_NAME_CHANGES, MEMBER_EMAIL, statusLabel } from '../auth'
+import { apiHealth } from '../deviceApi'
 import { Icon } from '../components/Icons'
 
 function formatCreated(iso) {
@@ -35,10 +36,25 @@ export default function AdminDevices() {
     useApp()
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
+  const [kvOk, setKvOk] = useState(null)
 
   useEffect(() => {
     if (!adminUnlocked) navigate('/admin/login', { replace: true })
   }, [adminUnlocked, navigate])
+
+  useEffect(() => {
+    let cancelled = false
+    async function check() {
+      const health = await apiHealth()
+      if (!cancelled) setKvOk(Boolean(health.kv))
+    }
+    check()
+    const timer = setInterval(check, 8000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [])
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -102,6 +118,15 @@ export default function AdminDevices() {
 
       <div className="pad admin-devices-body">
         <h1 className="admin-devices-title">Devices</h1>
+        {kvOk === false && (
+          <p className="admin-kv-warn">
+            Shared device store is offline. In Cloudflare → golivee → Settings → Bindings, add a KV namespace binding
+            named <strong>GOLIVE_DEVICES</strong>, then redeploy. Until then, phone signups will not appear here.
+          </p>
+        )}
+        {kvOk === true && (
+          <p className="admin-kv-ok">Live sync on — devices from phones show up here automatically.</p>
+        )}
 
         {list.length === 0 ? (
           <div className="admin-empty">
