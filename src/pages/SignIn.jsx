@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context'
-import { deviceLabel, MEMBER_EMAIL, MEMBER_PASSWORD, statusLabel } from '../auth'
+import { MEMBER_EMAIL, MEMBER_PASSWORD, statusLabel } from '../auth'
 import { Icon } from '../components/Icons'
 
 export default function SignIn() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { signInDevice, user, canUseApp, thisDevice, deviceId, deviceStatus } = useApp()
+  const { signInDevice, user, canUseApp, thisDevice, deviceStatus } = useApp()
   const [error, setError] = useState('')
   const justSignedUp = Boolean(location.state?.justSignedUp)
 
@@ -42,7 +42,6 @@ export default function SignIn() {
             ? 'Your name is in — hang tight until admin allows this device, then hit Sign in. Good luck ❤️🎉'
             : 'Hey Bomb — one device, one seat at the table. Sign in when you’re cleared, and the show’s yours. Good luck ❤️🎉'}
         </p>
-        <div className="device-chip">{deviceLabel(deviceId)}</div>
         {thisDevice && (
           <div className="auth-status">
             <span>Name</span>

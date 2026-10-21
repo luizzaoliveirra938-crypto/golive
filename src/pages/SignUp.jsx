@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../context'
-import { deviceLabel, MEMBER_EMAIL, MEMBER_PASSWORD } from '../auth'
+import { MEMBER_EMAIL, MEMBER_PASSWORD } from '../auth'
 import { Icon } from '../components/Icons'
 
 export default function SignUp() {
   const navigate = useNavigate()
-  const { signUpDevice, deviceId, thisDevice } = useApp()
+  const { signUpDevice, thisDevice } = useApp()
   const [name, setName] = useState(thisDevice?.name || '')
   const [error, setError] = useState('')
 
@@ -30,9 +30,9 @@ export default function SignUp() {
       </header>
       <form className="pad" onSubmit={submit} noValidate>
         <p className="lede tight">
-          Add your name for admin approval. The shared account email is shown below; the password stays hidden.
+          Drop your name, hit submit, and wait for the VIP nod. No drama — just you, the shows, and good vibes. Good luck
+          ❤️🎉
         </p>
-        <div className="device-chip">{deviceLabel(deviceId)}</div>
         <label className="field">
           <span>Full name</span>
           <input
