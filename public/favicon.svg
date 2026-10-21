@@ -1,4 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="16" fill="#000"/>
-  <text x="32" y="40" text-anchor="middle" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="28" font-weight="700" fill="#2FE3D2">go</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="GoLive">
+  <rect width="512" height="512" rx="108" fill="#000"/>
+  <g fill="none" stroke="#2FE3D2" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="188" cy="178" r="72"/>
+    <circle cx="324" cy="178" r="72"/>
+    <path d="M132 236 C 110 310, 150 368, 248 378 C 300 386, 332 364, 344 332"/>
+  </g>
+  <text
+    x="360"
+    y="384"
+    fill="#2FE3D2"
+    font-family="Arial Black, Arial, Helvetica, sans-serif"
+    font-size="70"
+    font-weight="900"
+    letter-spacing="2"
+  >LIVE</text>
 </svg>

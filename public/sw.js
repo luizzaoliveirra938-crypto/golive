@@ -1,6 +1,12 @@
 /* GoLive installable PWA — cache shell for offline open */
-const CACHE = 'golive-shell-v1'
-const ASSETS = ['/', '/manifest.webmanifest', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png']
+const CACHE = 'golive-shell-v3'
+const ASSETS = [
+  '/',
+  '/manifest.webmanifest',
+  '/golive-icon.png',
+  '/icons/golive-192.png',
+  '/icons/golive-512.png',
+]
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()))
@@ -19,6 +25,15 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return
   const url = new URL(request.url)
   if (url.pathname.startsWith('/api/')) return
+  // Always network-first for icons + manifest so logo updates show up
+  if (
+    url.pathname.includes('golive-') ||
+    url.pathname.endsWith('manifest.webmanifest') ||
+    url.pathname.endsWith('/sw.js')
+  ) {
+    event.respondWith(fetch(request).catch(() => caches.match(request)))
+    return
+  }
   event.respondWith(
     caches.match(request).then((cached) => {
       const fetched = fetch(request)

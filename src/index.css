@@ -66,22 +66,28 @@ img { display: block; max-width: 100%; }
 
 .logo {
   display: flex;
-  flex-direction: column;
-  line-height: 0.85;
+  align-items: center;
   color: var(--teal);
   flex: none;
+  line-height: 0;
 }
-.logo-go {
-  font-family: Nunito, "Segoe UI", sans-serif;
-  font-weight: 800;
-  font-size: 26px;
-  letter-spacing: -1.1px;
+.logo-mark {
+  display: block;
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 10px;
 }
-.logo-live {
-  font-weight: 800;
-  font-size: 8px;
-  letter-spacing: 2.2px;
-  margin-top: 2px;
+.top .logo-mark,
+.subhead .logo-mark {
+  width: 48px;
+  height: 48px;
+}
+.rail-brand .logo-mark,
+.bottom .logo-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
 }
 
 .top {

@@ -1,8 +1,7 @@
-export function Logo() {
+export function Logo({ className = '' }) {
   return (
-    <div className="logo" aria-label="GoLive">
-      <span className="logo-go">go</span>
-      <span className="logo-live">LIVE</span>
+    <div className={`logo ${className}`.trim()} aria-label="GoLive">
+      <img className="logo-mark" src="/golive-icon.png" alt="" width={120} height={120} />
     </div>
   )
 }

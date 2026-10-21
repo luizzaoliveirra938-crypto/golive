@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="GoLive">
+  <rect width="512" height="512" rx="108" fill="#000"/>
+  <g fill="none" stroke="#2FE3D2" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Linked go rings -->
+    <circle cx="196" cy="176" r="78"/>
+    <circle cx="316" cy="176" r="78"/>
+    <!-- g smile / hook -->
+    <path d="M140 248 C 118 318, 160 378, 256 386 C 310 392, 340 368, 348 334"/>
+  </g>
+  <text
+    x="368"
+    y="390"
+    fill="#2FE3D2"
+    font-family="Arial Black, Arial, Helvetica, sans-serif"
+    font-size="68"
+    font-weight="900"
+    letter-spacing="1"
+  >LIVE</text>
+</svg>
