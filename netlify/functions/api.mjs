@@ -31,16 +31,29 @@ function blobStore() {
 
 async function readStore() {
   const store = blobStore()
-  if (!store) return { devices: [], activeSessionDeviceId: null, missingBinding: true }
+  if (!store) {
+    return {
+      devices: [],
+      activeSessionDeviceId: null,
+      activeSessionFingerprint: null,
+      missingBinding: true,
+    }
+  }
   try {
     const parsed = await store.get(STORE_KEY, { type: 'json' })
-    if (!parsed) return { devices: [], activeSessionDeviceId: null }
+    if (!parsed) return { devices: [], activeSessionDeviceId: null, activeSessionFingerprint: null }
     return {
       devices: Array.isArray(parsed.devices) ? parsed.devices : [],
       activeSessionDeviceId: parsed.activeSessionDeviceId ?? null,
+      activeSessionFingerprint: parsed.activeSessionFingerprint ?? null,
     }
   } catch {
-    return { devices: [], activeSessionDeviceId: null, missingBinding: true }
+    return {
+      devices: [],
+      activeSessionDeviceId: null,
+      activeSessionFingerprint: null,
+      missingBinding: true,
+    }
   }
 }
 
@@ -50,6 +63,7 @@ async function writeStore(data) {
   await store.setJSON(STORE_KEY, {
     devices: data.devices || [],
     activeSessionDeviceId: data.activeSessionDeviceId ?? null,
+    activeSessionFingerprint: data.activeSessionFingerprint ?? null,
     updatedAt: new Date().toISOString(),
   })
   return { ok: true }
@@ -73,14 +87,26 @@ export default async (request) => {
   if (url.pathname === '/api/devices' && request.method === 'GET') {
     const store = await readStore()
     if (store.missingBinding) {
-      return json({ error: 'Shared store unavailable', devices: [], activeSessionDeviceId: null }, 503)
+      return json(
+        { error: 'Shared store unavailable', devices: [], activeSessionDeviceId: null, activeSessionFingerprint: null },
+        503
+      )
     }
     if (!isAdmin(request)) {
-      return json({ error: 'Admin authorization required', devices: [], activeSessionDeviceId: null }, 401)
+      return json(
+        {
+          error: 'Admin authorization required',
+          devices: [],
+          activeSessionDeviceId: null,
+          activeSessionFingerprint: null,
+        },
+        401
+      )
     }
     return json({
       devices: store.devices,
       activeSessionDeviceId: store.activeSessionDeviceId,
+      activeSessionFingerprint: store.activeSessionFingerprint,
     })
   }
 
@@ -90,7 +116,11 @@ export default async (request) => {
     const store = await readStore()
     if (store.missingBinding) return json({ error: 'Shared store unavailable' }, 503)
     const device = store.devices.find((item) => item.id === id) || null
-    return json({ device, activeSessionDeviceId: store.activeSessionDeviceId })
+    return json({
+      device,
+      activeSessionDeviceId: store.activeSessionDeviceId,
+      activeSessionFingerprint: store.activeSessionFingerprint,
+    })
   }
 
   if (deviceMatch && request.method === 'PUT') {
@@ -113,6 +143,7 @@ export default async (request) => {
       ok: true,
       device: store.devices.find((item) => item.id === id),
       activeSessionDeviceId: store.activeSessionDeviceId,
+      activeSessionFingerprint: store.activeSessionFingerprint,
     })
   }
 
@@ -136,7 +167,10 @@ export default async (request) => {
       updatedAt: new Date().toISOString(),
     }
     if (body.clearSession || ['blocked', 'suspended', 'rejected', 'subscribe'].includes(body.status)) {
-      if (store.activeSessionDeviceId === id) store.activeSessionDeviceId = null
+      if (store.activeSessionDeviceId === id) {
+        store.activeSessionDeviceId = null
+        store.activeSessionFingerprint = null
+      }
     }
     const saved = await writeStore(store)
     if (!saved.ok) return json(saved, 503)
@@ -144,6 +178,7 @@ export default async (request) => {
       ok: true,
       device: store.devices[index],
       activeSessionDeviceId: store.activeSessionDeviceId,
+      activeSessionFingerprint: store.activeSessionFingerprint,
       devices: store.devices,
     })
   }
@@ -154,10 +189,18 @@ export default async (request) => {
     const store = await readStore()
     if (store.missingBinding) return json({ error: 'Shared store unavailable' }, 503)
     store.devices = store.devices.filter((item) => item.id !== id)
-    if (store.activeSessionDeviceId === id) store.activeSessionDeviceId = null
+    if (store.activeSessionDeviceId === id) {
+      store.activeSessionDeviceId = null
+      store.activeSessionFingerprint = null
+    }
     const saved = await writeStore(store)
     if (!saved.ok) return json(saved, 503)
-    return json({ ok: true, devices: store.devices, activeSessionDeviceId: store.activeSessionDeviceId })
+    return json({
+      ok: true,
+      devices: store.devices,
+      activeSessionDeviceId: store.activeSessionDeviceId,
+      activeSessionFingerprint: store.activeSessionFingerprint,
+    })
   }
 
   if (url.pathname === '/api/session' && request.method === 'PUT') {
@@ -170,9 +213,14 @@ export default async (request) => {
       return json({ error: 'Invalid JSON' }, 400)
     }
     store.activeSessionDeviceId = body?.activeSessionDeviceId ?? null
+    store.activeSessionFingerprint = body?.activeSessionFingerprint ?? null
     const saved = await writeStore(store)
     if (!saved.ok) return json(saved, 503)
-    return json({ ok: true, activeSessionDeviceId: store.activeSessionDeviceId })
+    return json({
+      ok: true,
+      activeSessionDeviceId: store.activeSessionDeviceId,
+      activeSessionFingerprint: store.activeSessionFingerprint,
+    })
   }
 
   return json({ error: 'Not found' }, 404)

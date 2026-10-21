@@ -21,18 +21,24 @@ function isAdmin(request) {
 
 async function readStore(env) {
   if (!env.GOLIVE_DEVICES) {
-    return { devices: [], activeSessionDeviceId: null, missingBinding: true }
+    return {
+      devices: [],
+      activeSessionDeviceId: null,
+      activeSessionFingerprint: null,
+      missingBinding: true,
+    }
   }
   try {
     const raw = await env.GOLIVE_DEVICES.get(STORE_KEY)
-    if (!raw) return { devices: [], activeSessionDeviceId: null }
+    if (!raw) return { devices: [], activeSessionDeviceId: null, activeSessionFingerprint: null }
     const parsed = JSON.parse(raw)
     return {
       devices: Array.isArray(parsed.devices) ? parsed.devices : [],
       activeSessionDeviceId: parsed.activeSessionDeviceId ?? null,
+      activeSessionFingerprint: parsed.activeSessionFingerprint ?? null,
     }
   } catch {
-    return { devices: [], activeSessionDeviceId: null }
+    return { devices: [], activeSessionDeviceId: null, activeSessionFingerprint: null }
   }
 }
 
@@ -45,6 +51,7 @@ async function writeStore(env, store) {
     JSON.stringify({
       devices: store.devices || [],
       activeSessionDeviceId: store.activeSessionDeviceId ?? null,
+      activeSessionFingerprint: store.activeSessionFingerprint ?? null,
       updatedAt: new Date().toISOString(),
     })
   )
@@ -197,9 +204,14 @@ export default {
         return json({ error: 'Invalid JSON' }, 400)
       }
       store.activeSessionDeviceId = body?.activeSessionDeviceId ?? null
+      store.activeSessionFingerprint = body?.activeSessionFingerprint ?? null
       const saved = await writeStore(env, store)
       if (!saved.ok) return json(saved, 503)
-      return json({ ok: true, activeSessionDeviceId: store.activeSessionDeviceId })
+      return json({
+        ok: true,
+        activeSessionDeviceId: store.activeSessionDeviceId,
+        activeSessionFingerprint: store.activeSessionFingerprint,
+      })
     }
 
     return json({ error: 'Not found' }, 404)

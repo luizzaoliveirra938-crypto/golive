@@ -26,6 +26,7 @@ export async function apiGetAllDevices() {
     ok: true,
     devices: Array.isArray(data.devices) ? data.devices : [],
     activeSessionDeviceId: data.activeSessionDeviceId ?? null,
+    activeSessionFingerprint: data.activeSessionFingerprint ?? null,
   }
 }
 
@@ -33,12 +34,19 @@ export async function apiGetDevice(id) {
   const res = await fetch(`/api/devices/${encodeURIComponent(id)}`)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    return { ok: false, error: data.error || 'Failed to load device', device: null, activeSessionDeviceId: null }
+    return {
+      ok: false,
+      error: data.error || 'Failed to load device',
+      device: null,
+      activeSessionDeviceId: null,
+      activeSessionFingerprint: null,
+    }
   }
   return {
     ok: true,
     device: data.device || null,
     activeSessionDeviceId: data.activeSessionDeviceId ?? null,
+    activeSessionFingerprint: data.activeSessionFingerprint ?? null,
   }
 }
 
@@ -93,15 +101,19 @@ export async function apiDeleteDevice(id) {
   }
 }
 
-export async function apiSetSession(activeSessionDeviceId) {
+export async function apiSetSession(activeSessionDeviceId, activeSessionFingerprint = null) {
   const res = await fetch('/api/session', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ activeSessionDeviceId }),
+    body: JSON.stringify({ activeSessionDeviceId, activeSessionFingerprint }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     return { ok: false, error: data.error || 'Failed to update session' }
   }
-  return { ok: true, activeSessionDeviceId: data.activeSessionDeviceId ?? null }
+  return {
+    ok: true,
+    activeSessionDeviceId: data.activeSessionDeviceId ?? null,
+    activeSessionFingerprint: data.activeSessionFingerprint ?? null,
+  }
 }

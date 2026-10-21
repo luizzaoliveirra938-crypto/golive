@@ -54,6 +54,28 @@ export function getOrCreateDeviceId() {
   }
 }
 
+/**
+ * Stable-ish id for the physical phone/PC so browser + installed PWA
+ * on the same device share one session (they often have different localStorage ids).
+ */
+export function getDeviceFingerprint() {
+  if (typeof navigator === 'undefined') return 'fp_server'
+  const parts = [
+    navigator.userAgent || '',
+    navigator.language || '',
+    typeof screen !== 'undefined' ? `${screen.width}x${screen.height}x${screen.colorDepth}` : '',
+    navigator.platform || '',
+    navigator.maxTouchPoints || 0,
+  ]
+  const raw = parts.join('|')
+  let hash = 2166136261
+  for (let i = 0; i < raw.length; i += 1) {
+    hash ^= raw.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `fp_${(hash >>> 0).toString(36)}`
+}
+
 export function deviceLabel(id) {
   if (!id) return 'Unknown device'
   return String(id)

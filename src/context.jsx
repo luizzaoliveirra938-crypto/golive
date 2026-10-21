@@ -3,6 +3,7 @@ import { events as seedEvents, notifications } from './data'
 import {
   detectDeviceMeta,
   FORCE_LOGOUT_STATUSES,
+  getDeviceFingerprint,
   getOrCreateDeviceId,
   MAX_NAME_CHANGES,
   MEMBER_EMAIL,
@@ -89,7 +90,11 @@ function normalizeTicket(ticket) {
 export function AppProvider({ children }) {
   const saved = loadState()
   const deviceId = useMemo(() => getOrCreateDeviceId(), [])
+  const deviceFingerprint = useMemo(() => getDeviceFingerprint(), [])
   const [user, setUser] = useState(saved?.user ?? null)
+  const [activeSessionFingerprint, setActiveSessionFingerprint] = useState(
+    saved?.activeSessionFingerprint ?? null
+  )
   const [tickets, setTickets] = useState(() => (saved?.tickets ?? []).map(normalizeTicket))
   const [savedIds, setSavedIds] = useState(saved?.savedIds ?? [])
   const [cart, setCart] = useState(saved?.cart ?? [])
@@ -119,7 +124,11 @@ export function AppProvider({ children }) {
     [devices, deviceId]
   )
   const deviceStatus = thisDevice?.status || null
-  const canUseApp = Boolean(user && deviceStatus === 'allowed' && activeSessionDeviceId === deviceId)
+  // Same physical device (browser + installed app) shares a fingerprint — both stay signed in.
+  const sessionIsMine =
+    activeSessionDeviceId === deviceId ||
+    (Boolean(activeSessionFingerprint) && activeSessionFingerprint === deviceFingerprint)
+  const canUseApp = Boolean(user && deviceStatus === 'allowed' && sessionIsMine)
 
   const allEvents = useMemo(() => {
     const deleted = new Set(deletedEventIds)
@@ -159,6 +168,7 @@ export function AppProvider({ children }) {
         unread,
         devices,
         activeSessionDeviceId,
+        activeSessionFingerprint,
         adminUnlocked,
       })
     )
@@ -177,6 +187,7 @@ export function AppProvider({ children }) {
     unread,
     devices,
     activeSessionDeviceId,
+    activeSessionFingerprint,
     adminUnlocked,
   ])
 
@@ -199,6 +210,9 @@ export function AppProvider({ children }) {
       if ('activeSessionDeviceId' in result) {
         setActiveSessionDeviceId(result.activeSessionDeviceId)
       }
+      if ('activeSessionFingerprint' in result) {
+        setActiveSessionFingerprint(result.activeSessionFingerprint)
+      }
     }
 
     async function pullAll() {
@@ -206,6 +220,7 @@ export function AppProvider({ children }) {
       if (cancelled || !result.ok) return
       setDevices(result.devices)
       setActiveSessionDeviceId(result.activeSessionDeviceId)
+      setActiveSessionFingerprint(result.activeSessionFingerprint ?? null)
     }
 
     async function sync() {
@@ -222,14 +237,24 @@ export function AppProvider({ children }) {
     }
   }, [adminUnlocked, deviceId, deviceStatus])
 
-  // One active device session at a time — kick this tab if another device took the session.
+  // One physical device at a time — browser + app on the same phone share a fingerprint and stay signed in.
   useEffect(() => {
     if (!user) return
-    if (activeSessionDeviceId && activeSessionDeviceId !== deviceId) {
+    if (!activeSessionDeviceId && !activeSessionFingerprint) return
+    const otherDevice =
+      activeSessionDeviceId &&
+      activeSessionDeviceId !== deviceId &&
+      activeSessionFingerprint &&
+      activeSessionFingerprint !== deviceFingerprint
+    const otherDeviceLegacy =
+      activeSessionDeviceId &&
+      activeSessionDeviceId !== deviceId &&
+      !activeSessionFingerprint
+    if (otherDevice || otherDeviceLegacy) {
       setUser(null)
       setToast('Signed out — another device is using this account')
     }
-  }, [activeSessionDeviceId, deviceId, user])
+  }, [activeSessionDeviceId, activeSessionFingerprint, deviceId, deviceFingerprint, user])
 
   // Block / suspend / reject → log out immediately on this device.
   useEffect(() => {
@@ -248,6 +273,7 @@ export function AppProvider({ children }) {
     const meta = detectDeviceMeta()
     const next = {
       ...record,
+      fingerprint: deviceFingerprint,
       lastLoginAt: new Date().toISOString(),
       keepAccess: true,
       email: MEMBER_EMAIL,
@@ -258,9 +284,10 @@ export function AppProvider({ children }) {
     setUser({ name: record.name, email: MEMBER_EMAIL, deviceId })
     setDisplayName(record.name)
     setActiveSessionDeviceId(deviceId)
+    setActiveSessionFingerprint(deviceFingerprint)
     setDevices((prev) => mergeDevice(prev, next))
     await persistDevice(next)
-    await apiSetSession(deviceId)
+    await apiSetSession(deviceId, deviceFingerprint)
     return { ok: true, status: 'allowed' }
   }
 
@@ -302,7 +329,16 @@ export function AppProvider({ children }) {
         const next = JSON.parse(event.newValue)
         if (Array.isArray(next.devices)) setDevices(next.devices)
         if ('activeSessionDeviceId' in next) setActiveSessionDeviceId(next.activeSessionDeviceId ?? null)
-        if (next.activeSessionDeviceId && next.activeSessionDeviceId !== deviceId && user) {
+        if ('activeSessionFingerprint' in next) {
+          setActiveSessionFingerprint(next.activeSessionFingerprint ?? null)
+        }
+        if (
+          user &&
+          next.activeSessionDeviceId &&
+          next.activeSessionDeviceId !== deviceId &&
+          next.activeSessionFingerprint &&
+          next.activeSessionFingerprint !== deviceFingerprint
+        ) {
           setUser(null)
         }
       } catch {
@@ -311,7 +347,7 @@ export function AppProvider({ children }) {
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
-  }, [deviceId, user])
+  }, [deviceId, deviceFingerprint, user])
 
   function patchDeviceLocal(id, patch) {
     const updated = {
@@ -345,7 +381,7 @@ export function AppProvider({ children }) {
       return { ok: false, error: `Name can only be changed ${MAX_NAME_CHANGES} times.` }
     }
     const meta = detectDeviceMeta()
-    const signedInHere = Boolean(user && activeSessionDeviceId === deviceId)
+    const signedInHere = Boolean(user && sessionIsMine)
 
     let nextDevice
     if (signedInHere) {
@@ -467,6 +503,7 @@ export function AppProvider({ children }) {
         nameChanges: 0,
         previousName: '',
         keepAccess: false,
+        fingerprint: deviceFingerprint,
         userAgent: meta.userAgent,
         label: meta.label,
       }
@@ -498,6 +535,9 @@ export function AppProvider({ children }) {
       }
       if (remote.ok && 'activeSessionDeviceId' in remote) {
         setActiveSessionDeviceId(remote.activeSessionDeviceId)
+      }
+      if (remote.ok && 'activeSessionFingerprint' in remote) {
+        setActiveSessionFingerprint(remote.activeSessionFingerprint)
       }
       if (!record) {
         return { ok: false, error: 'No signup on this device. Create an account first.' }
@@ -538,9 +578,10 @@ export function AppProvider({ children }) {
       return result
     },
     signOut: async () => {
-      if (activeSessionDeviceId === deviceId) {
+      if (sessionIsMine) {
         setActiveSessionDeviceId(null)
-        await apiSetSession(null)
+        setActiveSessionFingerprint(null)
+        await apiSetSession(null, null)
       }
       setUser(null)
     },
