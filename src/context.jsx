@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { events as seedEvents, notifications } from './data'
 import {
   detectDeviceMeta,
@@ -214,12 +214,13 @@ export function AppProvider({ children }) {
     }
 
     sync()
-    const timer = setInterval(sync, adminUnlocked ? 3000 : 5000)
+    const waiting = deviceStatus === 'pending' || deviceStatus === 'edited' || deviceStatus === 'subscribe_pending'
+    const timer = setInterval(sync, adminUnlocked ? 3000 : waiting ? 2000 : 5000)
     return () => {
       cancelled = true
       clearInterval(timer)
     }
-  }, [adminUnlocked, deviceId])
+  }, [adminUnlocked, deviceId, deviceStatus])
 
   // One active device session at a time — kick this tab if another device took the session.
   useEffect(() => {
@@ -238,6 +239,45 @@ export function AppProvider({ children }) {
       if (activeSessionDeviceId === deviceId) setActiveSessionDeviceId(null)
     }
   }, [thisDevice, user, deviceId, activeSessionDeviceId])
+
+  const prevDeviceStatus = useRef(deviceStatus)
+  const autoSignInLock = useRef(false)
+
+  async function completeAllowedSignIn(record) {
+    if (!record || record.status !== 'allowed') return { ok: false }
+    const meta = detectDeviceMeta()
+    const next = {
+      ...record,
+      lastLoginAt: new Date().toISOString(),
+      keepAccess: true,
+      email: MEMBER_EMAIL,
+      userAgent: meta.userAgent || record.userAgent,
+      label: meta.label || record.label,
+      updatedAt: new Date().toISOString(),
+    }
+    setUser({ name: record.name, email: MEMBER_EMAIL, deviceId })
+    setDisplayName(record.name)
+    setActiveSessionDeviceId(deviceId)
+    setDevices((prev) => mergeDevice(prev, next))
+    await persistDevice(next)
+    await apiSetSession(deviceId)
+    return { ok: true, status: 'allowed' }
+  }
+
+  // When admin allows this device, sign them in automatically.
+  useEffect(() => {
+    const prev = prevDeviceStatus.current
+    prevDeviceStatus.current = deviceStatus
+    if (user || adminUnlocked || deviceStatus !== 'allowed' || !thisDevice) return
+    if (prev === 'allowed') return
+    if (autoSignInLock.current) return
+    autoSignInLock.current = true
+    ;(async () => {
+      const result = await completeAllowedSignIn(thisDevice)
+      autoSignInLock.current = false
+      if (result.ok) setToast('Approved — you’re signed in')
+    })()
+  }, [deviceStatus, thisDevice, user, adminUnlocked, deviceId])
 
   useEffect(() => {
     function onStorage(event) {
@@ -493,24 +533,9 @@ export function AppProvider({ children }) {
         return { ok: false, error: 'This device cannot sign in yet.', status: record.status }
       }
 
-      const meta = detectDeviceMeta()
-      const next = {
-        ...record,
-        lastLoginAt: new Date().toISOString(),
-        keepAccess: true,
-        email: MEMBER_EMAIL,
-        userAgent: meta.userAgent || record.userAgent,
-        label: meta.label || record.label,
-        updatedAt: new Date().toISOString(),
-      }
-      setUser({ name: record.name, email: MEMBER_EMAIL, deviceId })
-      setDisplayName(record.name)
-      setActiveSessionDeviceId(deviceId)
-      setDevices((prev) => mergeDevice(prev, next))
-      await persistDevice(next)
-      await apiSetSession(deviceId)
-      setToast('Signed in')
-      return { ok: true, status: 'allowed' }
+      const result = await completeAllowedSignIn(record)
+      if (result.ok) setToast('Signed in')
+      return result
     },
     signOut: async () => {
       if (activeSessionDeviceId === deviceId) {
