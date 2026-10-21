@@ -124,11 +124,13 @@ export function AppProvider({ children }) {
     [devices, deviceId]
   )
   const deviceStatus = thisDevice?.status || null
-  // Same physical device (browser + installed app) shares a fingerprint — both stay signed in.
+  // Stay signed in whenever this install is allowed — browser + app on the same phone
+  // often have different local device ids and must not kick each other.
+  const canUseApp = Boolean(user && deviceStatus === 'allowed')
   const sessionIsMine =
+    !activeSessionDeviceId ||
     activeSessionDeviceId === deviceId ||
     (Boolean(activeSessionFingerprint) && activeSessionFingerprint === deviceFingerprint)
-  const canUseApp = Boolean(user && deviceStatus === 'allowed' && sessionIsMine)
 
   const allEvents = useMemo(() => {
     const deleted = new Set(deletedEventIds)
@@ -237,25 +239,6 @@ export function AppProvider({ children }) {
     }
   }, [adminUnlocked, deviceId, deviceStatus])
 
-  // One physical device at a time — browser + app on the same phone share a fingerprint and stay signed in.
-  useEffect(() => {
-    if (!user) return
-    if (!activeSessionDeviceId && !activeSessionFingerprint) return
-    const otherDevice =
-      activeSessionDeviceId &&
-      activeSessionDeviceId !== deviceId &&
-      activeSessionFingerprint &&
-      activeSessionFingerprint !== deviceFingerprint
-    const otherDeviceLegacy =
-      activeSessionDeviceId &&
-      activeSessionDeviceId !== deviceId &&
-      !activeSessionFingerprint
-    if (otherDevice || otherDeviceLegacy) {
-      setUser(null)
-      setToast('Signed out — another device is using this account')
-    }
-  }, [activeSessionDeviceId, activeSessionFingerprint, deviceId, deviceFingerprint, user])
-
   // Block / suspend / reject → log out immediately on this device.
   useEffect(() => {
     if (!user || !thisDevice) return
@@ -331,15 +314,6 @@ export function AppProvider({ children }) {
         if ('activeSessionDeviceId' in next) setActiveSessionDeviceId(next.activeSessionDeviceId ?? null)
         if ('activeSessionFingerprint' in next) {
           setActiveSessionFingerprint(next.activeSessionFingerprint ?? null)
-        }
-        if (
-          user &&
-          next.activeSessionDeviceId &&
-          next.activeSessionDeviceId !== deviceId &&
-          next.activeSessionFingerprint &&
-          next.activeSessionFingerprint !== deviceFingerprint
-        ) {
-          setUser(null)
         }
       } catch {
         /* ignore */
