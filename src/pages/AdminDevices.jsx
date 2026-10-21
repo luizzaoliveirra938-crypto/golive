@@ -120,8 +120,8 @@ export default function AdminDevices() {
         <h1 className="admin-devices-title">Devices</h1>
         {kvOk === false && (
           <p className="admin-kv-warn">
-            Shared device store is offline. In Cloudflare → golivee → Settings → Bindings, add a KV namespace binding
-            named <strong>GOLIVE_DEVICES</strong>, then redeploy. Until then, phone signups will not appear here.
+            Shared device store is offline. On Netlify this uses Blobs automatically after deploy; on Cloudflare add a KV
+            binding named <strong>GOLIVE_DEVICES</strong>. Until the store is live, phone signups will not appear here.
           </p>
         )}
         {kvOk === true && (
