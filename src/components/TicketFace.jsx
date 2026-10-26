@@ -1,72 +1,97 @@
-import { formatWhen, rm } from '../data'
+import { rm } from '../data'
 import { Pattern } from './Pattern'
 
-function Row({ label, value }) {
-  if (!value && value !== 0) return null
-  return (
-    <div className="face-row">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
+function formatTicketDate(event, ticket) {
+  const raw = ticket.dateText || event.dateText || event.dateLabel || ''
+  if (!raw) return '—'
+  // Prefer a clean label like "9 December 2026 (GMT+8)"
+  if (/GMT/i.test(raw)) return raw
+  return `${raw.replace(/\s*·\s*.*$/, '').trim()} (GMT+8)`
 }
 
-export function TicketFace({ event, ticket }) {
-  const admit = ticket.admit || event.admit || ticket.qty || 1
-  const seating = [ticket.section || event.section, ticket.row || event.row, ticket.seat || event.seat]
-    .filter(Boolean)
-    .join(' · ')
+function formatTicketTime(event, ticket) {
+  const show = ticket.showTime || event.showTime || ''
+  if (show) return /GMT/i.test(show) ? show : `${show} (GMT+8)`
+  const fromDate = String(ticket.dateText || event.dateText || '')
+  const match = fromDate.match(/(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i)
+  if (match) return `${match[1].toUpperCase()} (GMT+8)`
+  return event.dateLabel || '—'
+}
+
+function ticketNo(ticket, index) {
+  const raw = ticket.code || ticket.id || ''
+  return String(raw).toUpperCase()
+}
+
+function orderId(ticket) {
+  return String(ticket.orderRef || ticket.id || '—').toUpperCase()
+}
+
+function categoryLabel(ticket, event) {
+  const tier = ticket.tier || event.category || 'General'
+  return String(tier).toUpperCase()
+}
+
+export function TicketFace({ event, ticket, index = 0, compact = false }) {
+  const n = String(index + 1).padStart(2, '0')
+  const venue = event.venue || event.city || '—'
+  const price = ticket.total != null ? rm(ticket.total) : ticket.subtotal != null ? rm(ticket.subtotal) : '—'
+  const holder = ticket.holderName || '—'
+  const category = categoryLabel(ticket, event)
+  const dateLabel = formatTicketDate(event, ticket)
+  const timeLabel = formatTicketTime(event, ticket)
 
   return (
-    <div className="ticket-face">
-      <div className="face-top">
-        <div>
-          <small>{event.category}</small>
-          <h3>{event.artist}</h3>
-          <p>{event.title}</p>
+    <article className={`stub-ticket ${compact ? 'compact' : ''}`}>
+      <h3 className="stub-ticket-label">TICKET {n}</h3>
+      <div className="stub-ticket-card">
+        <div className="stub-ticket-ids">
+          <div>
+            <span>TICKET NO</span>
+            <strong>{ticketNo(ticket, index)}</strong>
+          </div>
+          <div>
+            <span>ORDER ID</span>
+            <strong>{orderId(ticket)}</strong>
+          </div>
         </div>
-        <span className="date-pill static">{event.dateLabel}</span>
+
+        <div className="stub-ticket-block">
+          <span>PRICE</span>
+          <strong className="stub-price">{price}</strong>
+        </div>
+
+        <div className="stub-ticket-block">
+          <span>PARTICIPANT</span>
+          <strong>{holder}</strong>
+        </div>
+
+        <div className="stub-banner" aria-hidden="true">
+          <em>🇲🇾</em>
+          <span>{category}</span>
+        </div>
+
+        <div className="stub-pills">
+          <span>{venue}</span>
+          <span>{dateLabel}</span>
+          <span>{timeLabel}</span>
+        </div>
+
+        <div className="stub-ticket-block">
+          <span>CATEGORY</span>
+          <strong className="stub-cat">{category}</strong>
+        </div>
+
+        <p className="stub-later">Ticket details will be provided at a later date.</p>
+        <div className="stub-perforation" aria-hidden="true" />
       </div>
 
-      <div className="face-grid">
-        <Row label="Date & time" value={ticket.dateText || event.dateText} />
-        <Row
-          label="Doors / show"
-          value={
-            ticket.doorsTime || event.doorsTime || ticket.showTime || event.showTime
-              ? `Doors ${ticket.doorsTime || event.doorsTime || '—'} · Show ${ticket.showTime || event.showTime || '—'}`
-              : ''
-          }
-        />
-        <Row label="Venue" value={event.venue} />
-        <Row label="City" value={event.city} />
-        <Row label="Address" value={ticket.address || event.address} />
-        <Row label="Ticket type" value={ticket.tier} />
-        <Row label="Section / row / seat" value={seating} />
-        <Row label="Level" value={ticket.level || event.level} />
-        <Row label="Gate" value={ticket.gate || event.gate} />
-        <Row label="Entrance" value={ticket.entrance || event.entrance} />
-        <Row label="Admit" value={`${admit} ${admit === 1 ? 'person' : 'people'}`} />
-        <Row label="Age limit" value={ticket.ageLimit || event.ageLimit} />
-        <Row label="Ticket holder" value={ticket.holderName || event.holderName} />
-        <Row label="Order ref" value={ticket.orderRef || event.orderRef || ticket.id} />
-        <Row label="Ticket price" value={ticket.subtotal != null ? rm(ticket.subtotal) : ''} />
-        <Row label="Service fee" value={ticket.serviceFee != null ? rm(ticket.serviceFee) : ''} />
-        <Row label="Ticket Protect" value={ticket.protect ? rm(ticket.protectFee || 0) : ''} />
-        <Row label="Price paid" value={ticket.total != null ? rm(ticket.total) : ''} />
-        <Row label="Payment" value={ticket.paymentMethod || ''} />
-        <Row label="Purchased" value={ticket.purchasedAt ? formatWhen(ticket.purchasedAt) : ''} />
-      </div>
-
-      {(ticket.entryNotes || event.entryNotes) && (
-        <p className="face-notes">{ticket.entryNotes || event.entryNotes}</p>
+      {!compact && (
+        <div className="stub-qr">
+          <Pattern code={ticket.code} />
+          <p className="code">{ticket.code}</p>
+        </div>
       )}
-
-      <div className="qr-wrap">
-        <Pattern code={ticket.code} />
-      </div>
-      <p className="code">{ticket.code}</p>
-      <p className="hint">Present this ticket at the gate. Screenshot or keep the app open.</p>
-    </div>
+    </article>
   )
 }
