@@ -1,5 +1,4 @@
 import { rm } from '../data'
-import { Pattern } from './Pattern'
 
 function formatTicketDate(event, ticket) {
   const raw = ticket.dateText || event.dateText || event.dateLabel || ''
@@ -85,13 +84,6 @@ export function TicketFace({ event, ticket, index = 0, compact = false }) {
         <p className="stub-later">Ticket details will be provided at a later date.</p>
         <div className="stub-perforation" aria-hidden="true" />
       </div>
-
-      {!compact && (
-        <div className="stub-qr">
-          <Pattern code={ticket.code} />
-          <p className="code">{ticket.code}</p>
-        </div>
-      )}
     </article>
   )
 }

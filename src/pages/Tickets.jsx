@@ -170,24 +170,23 @@ export default function Tickets() {
                 </div>
               </div>
 
-              {activeTickets.length > 1 && (
-                <div className="ticket-switch" role="tablist" aria-label="Choose ticket">
+              <label className="ticket-select">
+                <select
+                  aria-label="Choose ticket"
+                  value={Math.min(ticketIndex, activeTickets.length - 1)}
+                  onChange={(e) => setTicketIndex(Number(e.target.value))}
+                >
                   {activeTickets.map((item, index) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={index === ticketIndex}
-                      className={index === ticketIndex ? 'on' : ''}
-                      onClick={() => setTicketIndex(index)}
-                    >
+                    <option key={item.id} value={index}>
                       Ticket {String(index + 1).padStart(2, '0')}
-                    </button>
+                    </option>
                   ))}
-                </div>
-              )}
+                </select>
+              </label>
 
               <TicketFace event={activeEvent} ticket={activeTicket} index={ticketIndex} />
+
+              <p className="ticket-code">{activeTicket.code}</p>
 
               <button type="button" className="btn ghost block" onClick={() => setShowReceipt(true)}>
                 View receipt
