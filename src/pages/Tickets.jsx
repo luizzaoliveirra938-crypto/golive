@@ -20,11 +20,34 @@ export default function Tickets() {
   const saved = allEvents.filter((event) => savedIds.includes(event.id))
 
   const groups = useMemo(() => {
+    function expandTicket(ticket) {
+      const count = Math.max(1, Number(ticket.qty) || Number(ticket.admit) || 1)
+      if (count === 1) return [ticket]
+      const seats = String(ticket.seat || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+      return Array.from({ length: count }, (_, index) => ({
+        ...ticket,
+        id: `${ticket.id}__${index + 1}`,
+        qty: 1,
+        admit: 1,
+        seat: seats[index] || ticket.seat,
+        code: `${ticket.code}-${String(index + 1).padStart(2, '0')}`,
+        total: (Number(ticket.total) || 0) / count,
+        subtotal: (Number(ticket.subtotal) || 0) / count,
+        serviceFee: (Number(ticket.serviceFee) || 0) / count,
+        protectFee: (Number(ticket.protectFee) || 0) / count,
+      }))
+    }
+
     const map = new Map()
     tickets.forEach((ticket) => {
-      const list = map.get(ticket.eventId) || []
-      list.push(ticket)
-      map.set(ticket.eventId, list)
+      expandTicket(ticket).forEach((item) => {
+        const list = map.get(item.eventId) || []
+        list.push(item)
+        map.set(item.eventId, list)
+      })
     })
     return [...map.entries()]
       .map(([eventId, items]) => ({ event: getEventById(eventId), tickets: items }))

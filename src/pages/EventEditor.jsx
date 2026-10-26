@@ -93,22 +93,28 @@ export default function EventEditor() {
     upsertEvent(event)
     if (issueTicket) {
       const tier = event.tiers[0]
-      const face = ticketFaceFromEvent(event, {
-        holderName: event.holderName || user?.name || '',
-        orderRef: event.orderRef || uid('OR'),
-      })
-      addTicket({
-        id: uid('TK'),
-        eventId: event.id,
-        tier: tier.name,
-        qty: Math.max(1, Number(event.admit) || 1),
-        total: tier.price,
-        code: uid('GL'),
-        purchasedAt: new Date().toISOString(),
-        ...face,
-        status: 'confirmed',
-      })
-      notify('Event saved and ticket issued')
+      const count = Math.max(1, Number(event.admit) || 1)
+      const orderRef = event.orderRef || uid('OR')
+      const purchasedAt = new Date().toISOString()
+      for (let index = 0; index < count; index += 1) {
+        const face = ticketFaceFromEvent(event, {
+          holderName: event.holderName || user?.name || '',
+          orderRef,
+          admit: 1,
+        })
+        addTicket({
+          id: uid('TK'),
+          eventId: event.id,
+          tier: tier.name,
+          qty: 1,
+          total: tier.price,
+          code: uid('GL'),
+          purchasedAt,
+          ...face,
+          status: 'confirmed',
+        })
+      }
+      notify(count > 1 ? `Event saved and ${count} tickets issued` : 'Event saved and ticket issued')
       navigate('/tickets')
       return event
     }

@@ -108,34 +108,61 @@ export default function Checkout() {
     setPaying(true)
     window.setTimeout(() => {
       const orderRef = uid('BK')
-      const face = ticketFaceFromEvent(event, {
-        ...seats,
-        holderName: buyer.name.trim(),
-        orderRef,
-        admit: qty,
-      })
-      const ticket = {
-        id: uid('TK'),
-        eventId: event.id,
-        tier: tier.name,
+      const seatList = String(seats?.seat || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+      const purchasedAt = new Date().toISOString()
+      const paymentMethod = paymentMethods.find((item) => item.id === paymentId)?.label || paymentId
+      const perSubtotal = prices.subtotal / qty
+      const perService = prices.serviceFee / qty
+      const perProtect = prices.protectFee / qty
+      const perTotal = prices.total / qty
+      const issued = []
+
+      for (let index = 0; index < qty; index += 1) {
+        const face = ticketFaceFromEvent(event, {
+          ...seats,
+          seat: seatList[index] || seats?.seat || '',
+          holderName: buyer.name.trim(),
+          orderRef,
+          admit: 1,
+        })
+        const ticket = {
+          id: uid('TK'),
+          eventId: event.id,
+          tier: tier.name,
+          qty: 1,
+          total: perTotal,
+          subtotal: perSubtotal,
+          serviceFee: perService,
+          protectFee: perProtect,
+          protect,
+          paymentMethod,
+          buyerEmail: buyer.email.trim(),
+          buyerPhone: buyer.phone.trim(),
+          code: uid('GL'),
+          purchasedAt,
+          status: 'confirmed',
+          ...face,
+        }
+        addTicket(ticket)
+        issued.push(ticket)
+      }
+
+      setDone({
+        ...issued[0],
         qty,
         total: prices.total,
         subtotal: prices.subtotal,
         serviceFee: prices.serviceFee,
         protectFee: prices.protectFee,
-        protect,
-        paymentMethod: paymentMethods.find((item) => item.id === paymentId)?.label || paymentId,
-        buyerEmail: buyer.email.trim(),
-        buyerPhone: buyer.phone.trim(),
-        code: uid('GL'),
-        purchasedAt: new Date().toISOString(),
+        seat: seats?.seat || issued[0]?.seat || '',
+        admit: qty,
         status: 'confirmed',
-        ...face,
-      }
-      addTicket(ticket)
-      setDone({ ...ticket, status: 'confirmed' })
+      })
       setPaying(false)
-      notify('Purchase complete — ticket ready')
+      notify(qty > 1 ? `Purchase complete — ${qty} tickets ready` : 'Purchase complete — ticket ready')
     }, 1100)
   }
 
