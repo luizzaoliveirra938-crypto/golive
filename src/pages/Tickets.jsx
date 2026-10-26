@@ -7,6 +7,7 @@ import Sheet from '../components/Sheet'
 import { TicketFace } from '../components/TicketFace'
 import { Receipt } from '../components/Receipt'
 import { ListCard } from '../components/Cards'
+import { Pattern } from '../components/Pattern'
 
 export default function Tickets() {
   const navigate = useNavigate()
@@ -15,6 +16,7 @@ export default function Tickets() {
   const [activeEventId, setActiveEventId] = useState(null)
   const [ticketIndex, setTicketIndex] = useState(0)
   const [showReceipt, setShowReceipt] = useState(false)
+  const [showQr, setShowQr] = useState(false)
   const saved = allEvents.filter((event) => savedIds.includes(event.id))
 
   const groups = useMemo(() => {
@@ -38,6 +40,7 @@ export default function Tickets() {
     setActiveEventId(eventId)
     setTicketIndex(0)
     setShowReceipt(false)
+    setShowQr(false)
   }
 
   function formatPillDate(event) {
@@ -118,7 +121,13 @@ export default function Tickets() {
       )}
 
       {activeEvent && activeTicket && (
-        <Sheet title={showReceipt ? 'Receipt' : 'Tickets'} onClose={() => setActiveEventId(null)}>
+        <Sheet
+          title={showReceipt ? 'Receipt' : 'Tickets'}
+          onClose={() => {
+            setActiveEventId(null)
+            setShowQr(false)
+          }}
+        >
           {showReceipt ? (
             <>
               <Receipt event={activeEvent} ticket={activeTicket} />
@@ -131,7 +140,14 @@ export default function Tickets() {
               <div className="ticket-hero">
                 <img src={activeEvent.image} alt="" />
                 <div className="ticket-hero-copy">
-                  <button type="button" className="back-link" onClick={() => setActiveEventId(null)}>
+                  <button
+                    type="button"
+                    className="back-link"
+                    onClick={() => {
+                      setActiveEventId(null)
+                      setShowQr(false)
+                    }}
+                  >
                     ← Back to Tickets
                   </button>
                   <span className="outline-pill teal">{String(activeEvent.category || 'Event').toUpperCase()}</span>
@@ -170,23 +186,43 @@ export default function Tickets() {
                 </div>
               </div>
 
-              <label className="ticket-select">
-                <select
-                  aria-label="Choose ticket"
-                  value={Math.min(ticketIndex, activeTickets.length - 1)}
-                  onChange={(e) => setTicketIndex(Number(e.target.value))}
-                >
+              {activeTickets.length > 1 && (
+                <div className="ticket-switch" role="tablist" aria-label="Choose ticket">
                   {activeTickets.map((item, index) => (
-                    <option key={item.id} value={index}>
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={index === ticketIndex}
+                      className={index === ticketIndex ? 'on' : ''}
+                      onClick={() => {
+                        setTicketIndex(index)
+                        setShowQr(false)
+                      }}
+                    >
                       Ticket {String(index + 1).padStart(2, '0')}
-                    </option>
+                    </button>
                   ))}
-                </select>
-              </label>
+                </div>
+              )}
 
               <TicketFace event={activeEvent} ticket={activeTicket} index={ticketIndex} />
 
-              <p className="ticket-code">{activeTicket.code}</p>
+              <button
+                type="button"
+                className={`ticket-code ${showQr ? 'on' : ''}`}
+                aria-expanded={showQr}
+                aria-controls="ticket-gate-qr"
+                onClick={() => setShowQr((open) => !open)}
+              >
+                {activeTicket.code}
+              </button>
+
+              {showQr && (
+                <div className="stub-qr" id="ticket-gate-qr">
+                  <Pattern code={activeTicket.code} />
+                </div>
+              )}
 
               <button type="button" className="btn ghost block" onClick={() => setShowReceipt(true)}>
                 View receipt
